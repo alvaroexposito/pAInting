@@ -3,10 +3,14 @@ import SwiftData
 import ImagePlayground
 import OSLog
 
+/// First tab: the child picks an animal, clothes and an accessory on picture
+/// cards, and a coloring page is generated from those ideas.
 struct CreateView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.supportsImagePlayground) private var supportsImagePlayground
 
+    @State private var cards = IdeaCardsViewModel()
+    /// Prompt built from the picked ideas, sent to the image generator.
     @State private var prompt = ""
     @State private var isGenerating = false
     @State private var isShowingImagePlayground = false
@@ -16,42 +20,24 @@ struct CreateView: View {
     /// Alternativa usada cuando el dispositivo no admite Image Playground
     /// (simulador, previews, dispositivos sin Apple Intelligence).
     var fallbackService: ImageGenerationService = MockImageGenerationService()
+    /// Turns the picked ideas into an image prompt.
+    var promptAssistant: PromptAssistantService = FoundationModelsPromptAssistant()
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Prompt") {
-                    TextField("A fox painting at sunset…", text: $prompt, axis: .vertical)
-                        .lineLimit(3...6)
-                        .accessibilityIdentifier("create.prompt")
-                }
-                Section {
-                    Button {
-                        if supportsImagePlayground {
-                            errorMessage = nil
-                            isShowingImagePlayground = true
-                        } else {
-                            Task { await generateWithFallback() }
-                        }
-                    } label: {
-                        HStack {
-                            Text("Generate")
-                            if isGenerating { Spacer(); ProgressView() }
-                        }
+            Group {
+                if cards.isComplete {
+                    generationView
+                } else {
+                    IdeaCardsView(model: cards) { _ in
+                        Task { await generate() }
                     }
-                    .disabled(trimmedPrompt.isEmpty || isGenerating)
-                    .accessibilityIdentifier("create.generate")
-                } footer: {
-                    Text("You'll get an outline to color in.")
-                }
-                if let errorMessage {
-                    Section { Text(errorMessage).foregroundStyle(.red) }
                 }
             }
             .navigationTitle("Create")
             .imagePlaygroundSheet(
                 isPresented: $isShowingImagePlayground,
-                concepts: [.text(trimmedPrompt), .text(Self.coloringPageConcept)]
+                concepts: [.text(prompt), .text(Self.coloringPageConcept)]
             ) { url in
                 Task { await saveImage(at: url) }
             }
@@ -62,14 +48,70 @@ struct CreateView: View {
         }
     }
 
+    /// Shown once the three ideas are picked: the selection, progress while the
+    /// image is created, and icon buttons to retry or start over.
+    private var generationView: some View {
+        VStack(spacing: 32) {
+            Spacer()
+            SelectionProgressView(selections: cards.selections)
+            if isGenerating {
+                ProgressView()
+                    .controlSize(.large)
+                    .accessibilityIdentifier("create.progress")
+            } else {
+                if let errorMessage {
+                    Text(errorMessage)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                }
+                HStack(spacing: 24) {
+                    Button("Start over", systemImage: "arrow.counterclockwise") {
+                        errorMessage = nil
+                        cards.restart()
+                    }
+                    .accessibilityIdentifier("create.restart")
+                    Button("Generate", systemImage: "wand.and.stars") {
+                        Task { await generate() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("create.generate")
+                }
+                .labelStyle(.iconOnly)
+                .font(.largeTitle)
+                .controlSize(.large)
+            }
+            Spacer()
+        }
+        .padding()
+    }
+
     /// Concepto añadido al prompt para orientar al modelo hacia una página para
     /// colorear. Se envía en inglés porque es el idioma mejor soportado.
     private static let coloringPageConcept = "coloring book page, clean black outlines, white background, no shading"
 
-    private var trimmedPrompt: String { prompt.trimmingCharacters(in: .whitespacesAndNewlines) }
+    /// Language-independent title for the artwork: the picked emojis.
+    private var artworkTitle: String {
+        cards.selections.map(\.emoji).joined(separator: " ")
+    }
 
     private func hue(for prompt: String) -> Double {
         Double(abs(prompt.hashValue) % 360) / 360
+    }
+
+    /// Builds the prompt from the picked ideas and starts the image generation.
+    private func generate() async {
+        guard !isGenerating else { return }
+        isGenerating = true
+        errorMessage = nil
+        prompt = await promptAssistant.prompt(for: cards.selections)
+        Logger.app.info("Generated prompt: \(prompt, privacy: .private)")
+        if supportsImagePlayground {
+            // The sheet takes over; `isGenerating` is set again while saving.
+            isGenerating = false
+            isShowingImagePlayground = true
+        } else {
+            await generateWithFallback()
+        }
     }
 
     /// Convierte la imagen devuelta por Image Playground en silueta y la guarda.
@@ -87,10 +129,10 @@ struct CreateView: View {
 
         guard let lineArt else {
             Logger.app.error("Couldn't convert generated image to line art")
-            errorMessage = String(localized: "The image couldn't be created. Try a different prompt.")
+            errorMessage = String(localized: "The image couldn't be created. Try again.")
             return
         }
-        insertArtwork(prompt: trimmedPrompt, hue: hue(for: trimmedPrompt), lineArt: lineArt)
+        insertArtwork(hue: hue(for: prompt), lineArt: lineArt)
     }
 
     private func generateWithFallback() async {
@@ -98,25 +140,29 @@ struct CreateView: View {
         errorMessage = nil
         defer { isGenerating = false }
         do {
-            let image = try await fallbackService.generate(prompt: trimmedPrompt)
-            insertArtwork(prompt: image.prompt, hue: image.hue, lineArt: image.imageData)
+            let image = try await fallbackService.generate(prompt: prompt)
+            insertArtwork(hue: image.hue, lineArt: image.imageData)
         } catch {
             Logger.app.error("Generation failed: \(error.localizedDescription)")
             errorMessage = error.localizedDescription
         }
     }
 
-    private func insertArtwork(prompt: String, hue: Double, lineArt: Data?) {
-        let artwork = Artwork(prompt: prompt, hue: hue, lineArtData: lineArt)
+    /// Saves the artwork, opens it for coloring and deals new cards for next time.
+    private func insertArtwork(hue: Double, lineArt: Data?) {
+        let artwork = Artwork(prompt: artworkTitle, hue: hue, lineArtData: lineArt)
         modelContext.insert(artwork)
-        self.prompt = ""
         if lineArt != nil {
             artworkToColor = artwork
+            cards.restart()
         }
     }
 }
 
 #Preview {
-    CreateView(fallbackService: MockImageGenerationService(delay: .milliseconds(200)))
-        .modelContainer(for: Artwork.self, inMemory: true)
+    CreateView(
+        fallbackService: MockImageGenerationService(delay: .milliseconds(200)),
+        promptAssistant: TemplatePromptAssistant()
+    )
+    .modelContainer(for: Artwork.self, inMemory: true)
 }

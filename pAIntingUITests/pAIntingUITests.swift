@@ -15,22 +15,25 @@ final class pAIntingUITests: XCTestCase {
         start.tap()
         // En iOS 26 la barra de pestañas no se expone como `tabBars`;
         // se comprueba que aparece la pestaña Create, la primera.
-        XCTAssertTrue(app.textFields["create.prompt"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["ideas.card.0"].waitForExistence(timeout: 10))
     }
 
+    /// Six cards are offered at each of the three steps, and Back undoes a pick.
     @MainActor
-    func testGenerateEnablesWithPrompt() throws {
+    func testCardsAdvanceThroughThreeSteps() throws {
         let app = XCUIApplication()
         app.launchArguments += ["-hasCompletedOnboarding", "YES"]
         app.launch()
-        let generate = app.buttons["create.generate"]
-        XCTAssertTrue(generate.waitForExistence(timeout: 10))
-        XCTAssertFalse(generate.isEnabled)
-        let field = app.textFields["create.prompt"]
-        XCTAssertTrue(field.waitForExistence(timeout: 10))
-        field.tap()
-        field.typeText("sunset")
-        XCTAssertTrue(generate.isEnabled)
+        for _ in 0..<2 {
+            let card = app.buttons["ideas.card.0"]
+            XCTAssertTrue(card.waitForExistence(timeout: 10))
+            XCTAssertTrue(app.buttons["ideas.card.5"].exists)
+            card.tap()
+        }
+        let back = app.buttons["ideas.back"]
+        XCTAssertTrue(back.waitForExistence(timeout: 5))
+        back.tap()
+        XCTAssertTrue(app.buttons["ideas.card.0"].waitForExistence(timeout: 5))
     }
 
     /// En el simulador no hay Image Playground: se usa la silueta simulada.
@@ -39,11 +42,12 @@ final class pAIntingUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments += ["-hasCompletedOnboarding", "YES"]
         app.launch()
-        let field = app.textFields["create.prompt"]
-        XCTAssertTrue(field.waitForExistence(timeout: 10))
-        field.tap()
-        field.typeText("house")
-        app.buttons["create.generate"].tap()
+        // Picks an animal, clothes and an accessory: no typing needed.
+        for _ in 0..<3 {
+            let card = app.buttons["ideas.card.0"]
+            XCTAssertTrue(card.waitForExistence(timeout: 10))
+            card.tap()
+        }
 
         let canvas = app.otherElements["coloring.canvas"]
         XCTAssertTrue(canvas.waitForExistence(timeout: 10))
