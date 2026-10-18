@@ -1,6 +1,6 @@
 # pAInting – contexto del proyecto
 
-App iOS para generar pinturas a partir de descripciones de texto.
+App iOS para uso infantil que permita que un niño pueda seleccionar, de un conjunto de temas que se le proponga los que le llamen más la atención y pueda colorear con el dedo las imágenes que más le llamen la atención.
 
 ## Stack
 - Swift + SwiftUI, SwiftData para persistencia, Swift Testing / XCTest.
@@ -12,6 +12,7 @@ App iOS para generar pinturas a partir de descripciones de texto.
   - Genera **texto**, no imágenes: usarlo para mejorar/expandir prompts, sugerir títulos y estilos, etc. La generación de imagen sigue detrás de `ImageGenerationService` (hoy `MockImageGenerationService`).
 
 ## Arquitectura
+- Arquitectura de la aplicación MVVM.
 - `pAInting/App` – punto de entrada.
 - `pAInting/Features/<Feature>` – una carpeta por pantalla/funcionalidad (Root, Onboarding, Create, Gallery, Settings).
 - `pAInting/Core/Models` – modelos SwiftData (`Artwork`).
@@ -26,7 +27,6 @@ App iOS para generar pinturas a partir de descripciones de texto.
 - Añadir `accessibilityIdentifier` a los controles usados en tests de UI.
 - Tests unitarios en `pAIntingTests`, de UI en `pAIntingUITests`.
 
-## Pendiente
-- Implementar servicio de prompts con Foundation Models y manejo de disponibilidad.
-- Implementar servicio real de generación de imágenes.
-- Icono 1024×1024, bundle id y equipo de firma definitivos.
+
+## Desarrollo
+- Por cada nueva implementación, crear una rama a parte para realizarla y realizar un PR a la rama principal. Facilitar por consola la URL de acceso al PR
