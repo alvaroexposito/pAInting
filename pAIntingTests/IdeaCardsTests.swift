@@ -37,11 +37,37 @@ struct IdeaCardsViewModelTests {
         #expect(model.currentCategory == .accessory)
         #expect(model.options.allSatisfy { $0.category == .accessory })
 
+        #expect(model.options.count == IdeaCardsViewModel.cardsPerStep)
+
         let accessory = try #require(model.options.first)
         model.select(accessory)
         #expect(model.isComplete)
         #expect(model.options.isEmpty)
         #expect(model.selections == [animal, clothing, accessory])
+    }
+
+    /// RF-1, RF-3, RF-5: every step deals six different ideas of its category.
+    @Test(arguments: 0..<20)
+    func everyStepDealsSixDistinctIdeas(seed: UInt64) throws {
+        let model = IdeaCardsViewModel(generator: SeededGenerator(state: seed))
+        for category in IdeaCategory.allCases {
+            #expect(model.currentCategory == category)
+            #expect(model.options.count == IdeaCardsViewModel.cardsPerStep)
+            #expect(Set(model.options).count == IdeaCardsViewModel.cardsPerStep)
+            #expect(model.options.allSatisfy { $0.category == category })
+            model.select(try #require(model.options.first))
+        }
+    }
+
+    /// RF-2, RF-4, RF-6: each card shows a single emoji and no letters.
+    @Test func everyIdeaIsShownAsASingleEmoji() {
+        for idea in IdeaCatalog.standard.ideas {
+            let hasLetters = idea.emoji.contains { $0.isLetter }
+            let isEmoji = idea.emoji.unicodeScalars.contains { $0.properties.isEmojiPresentation || $0 == "\u{FE0F}" }
+            #expect(idea.emoji.count == 1, "\(idea.id)")
+            #expect(!hasLetters, "\(idea.id)")
+            #expect(isEmoji, "\(idea.id)")
+        }
     }
 
     @Test func ignoresIdeasNotOnTheCards() throws {
@@ -89,5 +115,13 @@ struct PromptAssistantTests {
     @Test func templateSkipsMissingCategories() throws {
         #expect(TemplatePromptAssistant.template(for: [try idea("elephant")]) == "a cute elephant")
         #expect(TemplatePromptAssistant.template(for: []) == "a cute character")
+    }
+
+    /// CL-4: without Apple Intelligence the prompt falls back to the template.
+    @Test func foundationModelsFallsBackToTemplateWhenUnavailable() async throws {
+        let ideas = [try idea("cat"), try idea("coat"), try idea("crown")]
+        let assistant = FoundationModelsPromptAssistant(availability: { .unavailable(.appleIntelligenceNotEnabled) })
+        let prompt = await assistant.prompt(for: ideas)
+        #expect(prompt == "a cute cat wearing a coat with a crown")
     }
 }

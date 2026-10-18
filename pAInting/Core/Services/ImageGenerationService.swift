@@ -14,6 +14,15 @@ protocol ImageGenerationService {
     func generate(prompt: String) async throws -> GeneratedImage
 }
 
+/// Generator that always fails. Used by UI tests to exercise the error state.
+struct FailingImageGenerationService: ImageGenerationService {
+    struct GenerationError: Error {}
+
+    func generate(prompt: String) async throws -> GeneratedImage {
+        throw GenerationError()
+    }
+}
+
 /// Implementación simulada: espera un instante y devuelve una silueta de ejemplo.
 struct MockImageGenerationService: ImageGenerationService {
     var delay: Duration = .seconds(1)

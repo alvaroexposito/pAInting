@@ -5,6 +5,10 @@ import SwiftData
 struct pAIntingApp: App {
     @AppStorage(AppSettings.Keys.appearance) private var appearanceRaw = AppAppearance.system.rawValue
 
+    init() {
+        AppSettings.applyLaunchArguments()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()

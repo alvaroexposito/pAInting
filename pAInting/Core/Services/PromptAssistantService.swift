@@ -39,9 +39,14 @@ struct FoundationModelsPromptAssistant: PromptAssistantService {
         element of the description. Reply only with the sentence.
         """
 
+    /// Reports whether the on-device model can be used; injectable for tests.
+    var availability: @Sendable () -> SystemLanguageModel.Availability = {
+        SystemLanguageModel.default.availability
+    }
+
     func prompt(for ideas: [Idea]) async -> String {
         let base = TemplatePromptAssistant.template(for: ideas)
-        guard case .available = SystemLanguageModel.default.availability else {
+        guard case .available = availability() else {
             Logger.app.info("Foundation Models unavailable; using template prompt")
             return base
         }
