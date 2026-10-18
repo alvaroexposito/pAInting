@@ -14,7 +14,9 @@ struct CreateView: View {
     @State private var prompt = ""
     @State private var isGenerating = false
     @State private var isShowingImagePlayground = false
-    @State private var errorMessage: String?
+    /// Whether the last generation failed. Shown as an icon, not as text,
+    /// because the child may not be able to read.
+    @State private var didFail = false
     @State private var artworkToColor: Artwork?
 
     /// Alternativa usada cuando el dispositivo no admite Image Playground
@@ -22,6 +24,9 @@ struct CreateView: View {
     var fallbackService: ImageGenerationService = MockImageGenerationService()
     /// Turns the picked ideas into an image prompt.
     var promptAssistant: PromptAssistantService = FoundationModelsPromptAssistant()
+    /// Set to `false` to always use `fallbackService`, even where Image
+    /// Playground is supported (UI tests).
+    var usesImagePlayground = true
 
     var body: some View {
         NavigationStack {
@@ -59,14 +64,16 @@ struct CreateView: View {
                     .controlSize(.large)
                     .accessibilityIdentifier("create.progress")
             } else {
-                if let errorMessage {
-                    Text(errorMessage)
+                if didFail {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 56))
                         .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
+                        .accessibilityLabel(Text("The image couldn't be created. Try again."))
+                        .accessibilityIdentifier("create.error")
                 }
                 HStack(spacing: 24) {
                     Button("Start over", systemImage: "arrow.counterclockwise") {
-                        errorMessage = nil
+                        didFail = false
                         cards.restart()
                     }
                     .accessibilityIdentifier("create.restart")
@@ -102,10 +109,10 @@ struct CreateView: View {
     private func generate() async {
         guard !isGenerating else { return }
         isGenerating = true
-        errorMessage = nil
+        didFail = false
         prompt = await promptAssistant.prompt(for: cards.selections)
         Logger.app.info("Generated prompt: \(prompt, privacy: .private)")
-        if supportsImagePlayground {
+        if usesImagePlayground && supportsImagePlayground {
             // The sheet takes over; `isGenerating` is set again while saving.
             isGenerating = false
             isShowingImagePlayground = true
@@ -129,7 +136,7 @@ struct CreateView: View {
 
         guard let lineArt else {
             Logger.app.error("Couldn't convert generated image to line art")
-            errorMessage = String(localized: "The image couldn't be created. Try again.")
+            didFail = true
             return
         }
         insertArtwork(hue: hue(for: prompt), lineArt: lineArt)
@@ -137,14 +144,14 @@ struct CreateView: View {
 
     private func generateWithFallback() async {
         isGenerating = true
-        errorMessage = nil
+        didFail = false
         defer { isGenerating = false }
         do {
             let image = try await fallbackService.generate(prompt: prompt)
             insertArtwork(hue: image.hue, lineArt: image.imageData)
         } catch {
             Logger.app.error("Generation failed: \(error.localizedDescription)")
-            errorMessage = error.localizedDescription
+            didFail = true
         }
     }
 

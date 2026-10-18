@@ -19,7 +19,10 @@ struct IdeaCardsView: View {
                             select(idea)
                         }
                         .accessibilityIdentifier("ideas.card.\(index)")
-                        .transition(.scale.combined(with: .opacity))
+                        // Cards of the previous step disappear at once: if they
+                        // animated out, they would sit over the new cards and
+                        // swallow the child's next tap.
+                        .transition(.asymmetric(insertion: .scale.combined(with: .opacity), removal: .identity))
                     }
                 }
             }
@@ -110,6 +113,7 @@ struct SelectionProgressView: View {
             .accessibilityElement()
             .accessibilityLabel(idea.map { Text($0.name) } ?? Text(category.name))
             .accessibilityAddTraits(idea != nil ? .isSelected : [])
+            .accessibilityIdentifier("ideas.slot.\(category.rawValue)")
     }
 }
 
